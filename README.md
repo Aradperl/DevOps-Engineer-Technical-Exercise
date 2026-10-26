@@ -123,7 +123,7 @@ Pass looks like this: `terraform validate` and `terraform apply` exit 0. Three n
 
 Helm uses the cluster's API address and certificates. kubectl uses `terraform/kubeconfig`. That file, `.terraform/`, and `*.tfstate*` stay uncommitted.
 
-Part 2 manifests are in the repo and have not been synced yet. Argo CD reads GitHub, so this commit has to be pushed before the Application can sync.
+Part 2 was synced on 26 Oct 2026. Application `web` is Synced and Healthy at `e96c2e0`. Two pods are Running. `http://web.local` shows the message, version `0.1.0`, and the pod name. `/etc/hosts` contains `127.0.0.1 web.local`. Argo CD reads GitHub, so a manifest change has to be pushed before it syncs.
 
 - `deploy/web/deployment.yaml`: 2 replicas, probes on `/healthz`, requests and limits, rolling update `maxUnavailable: 0` and `maxSurge: 1`. Image `web:local` with `imagePullPolicy: Never`. The process runs as uid 65532. `HOSTNAME` is left unset so Kubernetes sets it to the pod name.
 - `deploy/web/service.yaml`: ClusterIP, port 80 to container port 8080.
