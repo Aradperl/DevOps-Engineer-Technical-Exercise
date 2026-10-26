@@ -25,14 +25,27 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Register arm64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Build and push the commit SHA
         run: |
+          # GitHub's runner is amd64. The kind nodes on this Mac are arm64.
+          # The first published tag was an amd64 image plus an attestation
+          # manifest, and the nodes refused it: no matching platform.
+          # provenance and sbom stay off so the tag is one arm64 image.
           image="ghcr.io/aradperl/devops-engineer-technical-exercise:${{ github.sha }}"
-          docker build \
+          docker buildx create --name exercise --driver docker-container --use
+          docker buildx build \
+            --platform linux/arm64 \
+            --provenance=false \
+            --sbom=false \
             --label org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}" \
-            -t "$image" \
+            --tag "$image" \
+            --push \
             .
-          docker push "$image"
 
       - name: Make the package public
         env:
