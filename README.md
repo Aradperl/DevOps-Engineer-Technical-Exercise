@@ -175,7 +175,17 @@ Finished:
 - Part 2. Argo CD syncs `deploy/web` from `main`. The page opens at `http://web.local`.
 - Part 3. GitHub Actions builds an arm64 image, pushes it to public GHCR tagged with the full commit SHA, and commits that tag back to `deploy/web/deployment.yaml`. CI does not run kubectl. The browser shows `hello during the rollout`.
 
-Missing: the bonus. No HorizontalPodAutoscaler, no Prometheus or Grafana, and no EKS note.
+Bonus manifests are in this commit. `deploy/web/hpa.yaml` scales `web` from 2 to 5 replicas at 70% CPU. `deploy/metrics-server.yaml` and `deploy/monitoring.yaml` are Argo CD Applications for Helm charts, applied once, the same way as `deploy/application.yaml`. They stay outside `deploy/web` so the web Application does not copy them into `default`.
+
+## EKS
+
+The local cluster is kind. On EKS the application manifests and the GitHub workflow stay. These pieces change:
+
+- Terraform creates an EKS cluster and a managed node group instead of a kind cluster. `terraform destroy` still removes them. kubectl uses the AWS kubeconfig, not `terraform/kubeconfig`.
+- ingress-nginx is a LoadBalancer, or the AWS Load Balancer Controller replaces it. The control-plane host port 80 and the `ingress-ready` label go away.
+- The image is the same public GHCR tag, or a copy in ECR. There is no `kind load`, and `imagePullPolicy: Never` is not used.
+- Prometheus keeps its data on a persistent volume such as gp3. This laptop uses the chart's empty disk because the data only has to last for the exercise.
+- metrics-server does not get `--kubelet-insecure-tls`. EKS kubelet certificates are ones the API server trusts.
 
 One decision: the workflow builds `linux/arm64` and turns provenance off. GitHub's runner is amd64. The kind nodes on this Mac are arm64. The first published tag was an amd64 image plus an attestation manifest, and the node reported no matching platform. `maxUnavailable: 0` kept the old pods serving until an image the nodes could run existed.
 

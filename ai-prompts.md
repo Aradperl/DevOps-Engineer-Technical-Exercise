@@ -59,3 +59,13 @@ The arm64 tag rolled out. Both pods are Ready on that image and the page still s
 That curl loop printed `000fail`. macOS treats `.local` as a network name, so curl never reached the ingress. The rollout had already finished. Run the loop with `--resolve web.local:80:127.0.0.1` and change `MESSAGE` to `hello during the rollout` while it is printing `200`.
 
 The browser showed that message on pod `web-57bcf54d88-s9w72`. Record the finished parts, the missing bonus, the arm64 image decision, and the `.local` curl failure in the README.
+
+## Bonus
+
+Part 3 is done. Add the bonus.
+
+An HorizontalPodAutoscaler for `web`, minimum 2 replicas and maximum 5, in `deploy/web` so the existing Argo CD Application syncs it. The cluster has no metrics API, so install metrics-server through Argo CD. Kind's kubelet certificate is not trusted by metrics-server, so pass `--kubelet-insecure-tls`.
+
+Install Prometheus and Grafana through Argo CD with the `kube-prometheus-stack` chart. Leave Alertmanager out. Grafana is reachable at `grafana.local` through the ingress that is already installed. Pin the chart versions.
+
+In the README, write what would change to run this on EKS. The candidate commits and pushes. Apply the two new Applications once; they are Helm releases, so they stay outside `deploy/web`.
