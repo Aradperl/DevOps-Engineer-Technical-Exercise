@@ -25,7 +25,7 @@ spec:
         runAsGroup: 1000
       containers:
         - name: web
-          image: ghcr.io/aradperl/devops-engineer-technical-exercise:ad3f5bd2a9cbdce056b4af53851b543b94490e0e
+          image: ghcr.io/aradperl/devops-engineer-technical-exercise:41718815ef10d654892943cfb96b77761d416c5a
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
