@@ -32,7 +32,7 @@ spec:
               containerPort: 8080
           env:
             - name: MESSAGE
-              value: hello from the exercise
+              value: hello from the rollout
             - name: APP_VERSION
               value: "0.1.0"
           readinessProbe:

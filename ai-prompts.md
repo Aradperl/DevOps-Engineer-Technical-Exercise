@@ -53,3 +53,5 @@ A workflow on push to `main` builds the image, pushes `ghcr.io/aradperl/devops-e
 The first run pushed the image and then failed. `GITHUB_TOKEN` got HTTP 404 from `/user/packages`, so the tag was not committed. Call `/users/Aradperl/packages/container/devops-engineer-technical-exercise` instead, and retry until the package record exists.
 
 The retry run went green and committed the tag. The kind nodes are arm64 and the published image was linux/amd64 plus an attestation manifest, so the new pod stayed in ImagePullBackOff. Build `linux/arm64` with provenance and sbom turned off. The old pods keep serving because `maxUnavailable` is 0.
+
+The arm64 tag rolled out. Both pods are Ready on that image and the page still shows the old message. Change `MESSAGE` to `hello from the rollout`, push, and curl `http://web.local` through the rollout. A pass is a 200 on every request.
