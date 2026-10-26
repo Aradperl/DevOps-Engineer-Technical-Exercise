@@ -144,7 +144,7 @@ curl -fsS http://web.local/
 
 A pass is Application `web` Synced and Healthy, two Running pods, and `curl` printing the HTML page. Open `http://web.local` in a browser too. A refresh can show either pod name. Leave the cluster up.
 
-Part 3 is serving the arm64 image. Application `web` is Synced and Healthy at `c961ca1`. Both pods run `ghcr.io/aradperl/devops-engineer-technical-exercise:eb241d1bebb025fbf03738f7781b7eb0622d3829`, and `uname -m` inside a pod is `aarch64`. The earlier tag `8a62500` was linux/amd64, which the nodes refused. The workflow now builds `linux/arm64` with provenance and sbom turned off. `MESSAGE` was `hello from the rollout` at `c03d486`. A curl to `http://web.local` from this Mac returns `000` because `.local` is resolved as a network name and the lookup hits the 2 second limit. The same request with `--resolve web.local:80:127.0.0.1` returns `200`. This push changes `MESSAGE` to `hello during the rollout` while that loop is running. `.github/workflows/image.yml` runs on every push to `main` unless the pusher is `github-actions[bot]`. It builds this repo's Dockerfile, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag into `deploy/web/deployment.yaml` with `imagePullPolicy: IfNotPresent`. The workflow does not run kubectl. Argo CD syncs the bot commit from `main`.
+Part 3 is done. Application `web` is Synced and Healthy at `0d5e57c`. Both pods run `ghcr.io/aradperl/devops-engineer-technical-exercise:960cf0f79f5b7de3888524c92e267ea38722dfa8`. On 26 Oct 2026 at 19:40 the browser at `http://web.local` showed message `hello during the rollout`, version `0.1.0`, and pod `web-57bcf54d88-s9w72`. The earlier tag `8a62500` was linux/amd64, which the arm64 nodes refused. The workflow builds `linux/arm64` with provenance and sbom turned off. A curl to `http://web.local` from this Mac returns `000` because `.local` is resolved as a network name and the lookup hits the 2 second limit. The same request with `--resolve web.local:80:127.0.0.1` returns `200`. `.github/workflows/image.yml` runs on every push to `main` unless the pusher is `github-actions[bot]`. It builds this repo's Dockerfile, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag into `deploy/web/deployment.yaml` with `imagePullPolicy: IfNotPresent`. The workflow does not run kubectl. Argo CD syncs the bot commit from `main`.
 
 The kind nodes pull the image themselves, so the GHCR package has to be public. The repo's Actions token was read-only, which would block that tag commit. It is now allowed to write.
 
@@ -154,7 +154,7 @@ The message change comes after that. Edit `MESSAGE` in `deploy/web/deployment.ya
 
 ```bash
 while true; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://web.local/ || echo fail)
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 --resolve web.local:80:127.0.0.1 http://web.local/ || echo fail)
   printf '%s %s\n' "$(date +%T)" "$code"
   sleep 0.2
 done
@@ -165,3 +165,18 @@ A pass is a `200` on every line. Old pods keep serving during the rollout becaus
 ```bash
 kubectl --kubeconfig=terraform/kubeconfig annotate application web -n argocd argocd.argoproj.io/refresh=hard --overwrite
 ```
+
+## Where this stands
+
+Finished:
+
+- Part 0. Python service, non-root image, checked locally.
+- Part 1. Kind cluster `exercise` is up: 1 control-plane, 2 workers, ingress-nginx, Argo CD. Leave it up.
+- Part 2. Argo CD syncs `deploy/web` from `main`. The page opens at `http://web.local`.
+- Part 3. GitHub Actions builds an arm64 image, pushes it to public GHCR tagged with the full commit SHA, and commits that tag back to `deploy/web/deployment.yaml`. CI does not run kubectl. The browser shows `hello during the rollout`.
+
+Missing: the bonus. No HorizontalPodAutoscaler, no Prometheus or Grafana, and no EKS note.
+
+One decision: the workflow builds `linux/arm64` and turns provenance off. GitHub's runner is amd64. The kind nodes on this Mac are arm64. The first published tag was an amd64 image plus an attestation manifest, and the node reported no matching platform. `maxUnavailable: 0` kept the old pods serving until an image the nodes could run existed.
+
+One place the AI was wrong: the curl loop was first given as `curl http://web.local/`. Every line was `000fail`. `/etc/hosts` already contained `127.0.0.1 web.local`, and `curl -H 'Host: web.local' http://127.0.0.1/` returned `200`. macOS was spending the timeout on the `.local` lookup. The loop that reaches the ingress is `curl --resolve web.local:80:127.0.0.1 http://web.local/`.

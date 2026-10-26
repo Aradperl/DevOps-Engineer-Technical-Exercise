@@ -57,3 +57,5 @@ The retry run went green and committed the tag. The kind nodes are arm64 and the
 The arm64 tag rolled out. Both pods are Ready on that image and the page still shows the old message. Change `MESSAGE` to `hello from the rollout`, push, and curl `http://web.local` through the rollout. A pass is a 200 on every request.
 
 That curl loop printed `000fail`. macOS treats `.local` as a network name, so curl never reached the ingress. The rollout had already finished. Run the loop with `--resolve web.local:80:127.0.0.1` and change `MESSAGE` to `hello during the rollout` while it is printing `200`.
+
+The browser showed that message on pod `web-57bcf54d88-s9w72`. Record the finished parts, the missing bonus, the arm64 image decision, and the `.local` curl failure in the README.
