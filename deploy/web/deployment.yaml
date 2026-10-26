@@ -25,8 +25,8 @@ spec:
         runAsGroup: 1000
       containers:
         - name: web
-          image: web:local
-          imagePullPolicy: Never
+          image: ghcr.io/aradperl/devops-engineer-technical-exercise:8a62500385dbd39d0d5d8f412e92af4afd0dbe5c
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
