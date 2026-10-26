@@ -1,0 +1,70 @@
+name: image
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: image-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the commit that was pushed
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push the commit SHA
+        run: |
+          image="ghcr.io/aradperl/devops-engineer-technical-exercise:${{ github.sha }}"
+          docker build \
+            --label org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}" \
+            -t "$image" \
+            .
+          docker push "$image"
+
+      - name: Make the package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            /user/packages/container/devops-engineer-technical-exercise \
+            -f visibility=public; then
+            echo "Package is public."
+          else
+            echo "GITHUB_TOKEN could not change the package visibility."
+            echo "Set it to public, then re-run this job:"
+            echo "https://github.com/users/Aradperl/packages/container/devops-engineer-technical-exercise/settings"
+            exit 1
+          fi
+
+      - name: Write the image tag into the Deployment
+        run: |
+          image="ghcr.io/aradperl/devops-engineer-technical-exercise:${{ github.sha }}"
+          sed -i -E "s|(image: ).*|\1${image}|" deploy/web/deployment.yaml
+          sed -i -E "s|(imagePullPolicy: ).*|\1IfNotPresent|" deploy/web/deployment.yaml
+          grep -n -E 'image:|imagePullPolicy:' deploy/web/deployment.yaml
+
+      - name: Commit the tag back to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/web/deployment.yaml
+          if git diff --cached --quiet; then
+            echo "Deployment already points at this image."
+            exit 0
+          fi
+          git commit -m "Roll the web image to ${{ github.sha }}"
+          git push origin HEAD:main

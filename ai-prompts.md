@@ -41,3 +41,11 @@ Commit only the two `h1` lines `terraform init` added to `terraform/.terraform.l
 Plan Part 2, then implement it after the lockfile commit is on `main`.
 
 Manifests for the app live in `deploy/web`. The Argo CD Application lives in `deploy/application.yaml` and is applied once into the `argocd` namespace. It syncs `deploy/web` from `main`. The first image is `web:local`, loaded into kind. The Ingress host is `web.local`. Update the README status and this file in the same change. The candidate commits and pushes before Argo CD is asked to sync.
+
+Record the Part 2 browser check in the README. The candidate commits and pushes that.
+
+## Part 3
+
+The Part 2 README commit is pushed. Implement Part 3.
+
+A workflow on push to `main` builds the image, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full-sha>`, and commits that tag into `deploy/web/deployment.yaml`. Skip pushes from `github-actions[bot]`. Do not run kubectl. The package has to be public so the kind nodes can pull it. Leave the message change and the curl loop for the push after this workflow is on `main`. Update the README and this file in the same change. The candidate commits and pushes.

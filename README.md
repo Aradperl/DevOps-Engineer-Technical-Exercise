@@ -143,3 +143,25 @@ curl -fsS http://web.local/
 ```
 
 A pass is Application `web` Synced and Healthy, two Running pods, and `curl` printing the HTML page. Open `http://web.local` in a browser too. A refresh can show either pod name. Leave the cluster up.
+
+Part 3 is written and has not run yet. `.github/workflows/image.yml` runs on every push to `main` unless the pusher is `github-actions[bot]`. It builds this repo's Dockerfile, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag into `deploy/web/deployment.yaml` with `imagePullPolicy: IfNotPresent`. The workflow does not run kubectl. Argo CD syncs the bot commit from `main`.
+
+The kind nodes pull the image themselves, so the GHCR package has to be public. The repo's Actions token was read-only, which would block that tag commit. It is now allowed to write.
+
+After this commit is pushed, the run to watch is the `image` workflow. A pass is a green run and a following commit, `Roll the web image to <sha>`, whose Deployment image is `ghcr.io/aradperl/devops-engineer-technical-exercise:<that sha>`. Application `web` then becomes Synced and Healthy on that commit, and `http://web.local` still returns the page.
+
+The message change comes after that. Edit `MESSAGE` in `deploy/web/deployment.yaml`, push, and while Argo CD rolls it out:
+
+```bash
+while true; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://web.local/ || echo fail)
+  printf '%s %s\n' "$(date +%T)" "$code"
+  sleep 0.2
+done
+```
+
+A pass is a `200` on every line. Old pods keep serving during the rollout because `maxUnavailable` is 0. Argo CD polls GitHub about every 3 minutes. To ask it to read `main` now:
+
+```bash
+kubectl --kubeconfig=terraform/kubeconfig annotate application web -n argocd argocd.argoproj.io/refresh=hard --overwrite
+```
