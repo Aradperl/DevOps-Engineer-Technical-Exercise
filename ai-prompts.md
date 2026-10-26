@@ -31,3 +31,13 @@ Form a plan for Part 1 with the implementation and the tests that show the part 
 Add a copy-paste git command section, and an explanation of what the code change does.
 
 Implement Part 1 as specified. Terraform creates a kind cluster named `exercise` with 1 control-plane and 2 workers, installs ingress-nginx and Argo CD, and can destroy the cluster. Do not commit. The desktop runs apply and the checks.
+
+`brew install terraform` fails because Homebrew core no longer has that formula. Install Terraform from the HashiCorp tap, plus kind and Helm. Run init, validate, and apply from `terraform/`.
+
+Commit only the two `h1` lines `terraform init` added to `terraform/.terraform.lock.hcl`. The candidate commits and pushes that by hand.
+
+## Part 2
+
+Plan Part 2, then implement it after the lockfile commit is on `main`.
+
+Manifests for the app live in `deploy/web`. The Argo CD Application lives in `deploy/application.yaml` and is applied once into the `argocd` namespace. It syncs `deploy/web` from `main`. The first image is `web:local`, loaded into kind. The Ingress host is `web.local`. Update the README status and this file in the same change. The candidate commits and pushes before Argo CD is asked to sync.

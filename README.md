@@ -91,7 +91,7 @@ docker rm -f web-part0
 
 `id` should show uid 65532.
 
-Part 1 is written and has not been applied yet. In this session `terraform validate` passed and `terraform plan` shows 3 resources to add: the kind cluster, ingress-nginx, and Argo CD. Apply was not run here because Docker, kind, and kubectl are not installed in this session. Apply it on the desktop. Port 80 must be free. Chart versions pinned in Terraform:
+Part 1 was applied on 26 Oct 2026 from `terraform/`. `terraform apply` added the kind cluster, ingress-nginx, and Argo CD. The checks below passed: three Ready nodes (1 control-plane, 2 workers), the control-plane labeled `ingress-ready=true`, the ingress-nginx controller Running, `curl http://127.0.0.1/` returning nginx's 404, and `argocd-server`, `argocd-repo-server`, and `argocd-application-controller` Running. The cluster is still up. Terraform on this Mac is `brew install hashicorp/tap/terraform`, because `brew install terraform` no longer exists. Chart versions pinned in Terraform:
 
 - ingress-nginx `4.15.1`
 - argo-cd `10.11.6`
@@ -122,3 +122,24 @@ terraform plan -destroy
 Pass looks like this: `terraform validate` and `terraform apply` exit 0. Three nodes are Ready, one of them is the control-plane, two are workers, and the control-plane has `ingress-ready=true`. The ingress-nginx controller is Running. `curl` reaches nginx. A 404 is a pass, because the app Ingress is Part 2. `argocd-server`, `argocd-repo-server`, and `argocd-application-controller` are Running. `terraform plan -destroy` lists the cluster and both Helm releases. Do not apply that destroy plan. Leave the cluster up.
 
 Helm uses the cluster's API address and certificates. kubectl uses `terraform/kubeconfig`. That file, `.terraform/`, and `*.tfstate*` stay uncommitted.
+
+Part 2 manifests are in the repo and have not been synced yet. Argo CD reads GitHub, so this commit has to be pushed before the Application can sync.
+
+- `deploy/web/deployment.yaml`: 2 replicas, probes on `/healthz`, requests and limits, rolling update `maxUnavailable: 0` and `maxSurge: 1`. Image `web:local` with `imagePullPolicy: Never`. The process runs as uid 65532. `HOSTNAME` is left unset so Kubernetes sets it to the pod name.
+- `deploy/web/service.yaml`: ClusterIP, port 80 to container port 8080.
+- `deploy/web/ingress.yaml`: class `nginx`, host `web.local`.
+- `deploy/application.yaml`: applied once into the `argocd` namespace. It syncs `deploy/web` from `main`. It stays outside `deploy/web` so Argo CD does not copy that Application into `default`.
+
+After the push, from the repo root:
+
+```bash
+docker build -t web:local .
+kind load docker-image web:local --name exercise
+kubectl --kubeconfig=terraform/kubeconfig apply -f deploy/application.yaml
+kubectl --kubeconfig=terraform/kubeconfig get applications -n argocd
+kubectl --kubeconfig=terraform/kubeconfig get pods,svc,ingress
+grep -q 'web.local' /etc/hosts || echo '127.0.0.1 web.local' | sudo tee -a /etc/hosts
+curl -fsS http://web.local/
+```
+
+A pass is Application `web` Synced and Healthy, two Running pods, and `curl` printing the HTML page. Open `http://web.local` in a browser too. A refresh can show either pod name. Leave the cluster up.
