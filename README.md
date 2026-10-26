@@ -78,7 +78,7 @@ Part 0, checked from the agent session on 26 Oct 2026:
 - `GET /healthz` returns 200 and `ok`.
 - Any other path returns 404.
 
-Docker is not installed in that session, so the image is not built there yet. On the desktop, where Docker is installed, run:
+The image build runs on the desktop, where Docker is installed:
 
 ```bash
 docker build -t web:local .
@@ -89,4 +89,36 @@ docker exec web-part0 id
 docker rm -f web-part0
 ```
 
-`id` should show uid 65532. Nothing has been deployed. The cluster is not up.
+`id` should show uid 65532.
+
+Part 1 is written and has not been applied yet. In this session `terraform validate` passed and `terraform plan` shows 3 resources to add: the kind cluster, ingress-nginx, and Argo CD. Apply was not run here because Docker, kind, and kubectl are not installed in this session. Apply it on the desktop. Port 80 must be free. Chart versions pinned in Terraform:
+
+- ingress-nginx `4.15.1`
+- argo-cd `10.11.6`
+- provider `tehcyx/kind` `0.13.0`
+- provider `hashicorp/helm` `2.17.0`
+
+From `terraform/`:
+
+```bash
+terraform init
+terraform validate
+terraform apply
+```
+
+Then:
+
+```bash
+kubectl --kubeconfig=kubeconfig get nodes
+kubectl --kubeconfig=kubeconfig get nodes -l node-role.kubernetes.io/control-plane --no-headers
+kubectl --kubeconfig=kubeconfig get nodes -l '!node-role.kubernetes.io/control-plane' --no-headers
+kubectl --kubeconfig=kubeconfig get nodes -l ingress-ready=true --no-headers
+kubectl --kubeconfig=kubeconfig get pods -n ingress-nginx
+curl -sI http://127.0.0.1/
+kubectl --kubeconfig=kubeconfig get pods -n argocd
+terraform plan -destroy
+```
+
+Pass looks like this: `terraform validate` and `terraform apply` exit 0. Three nodes are Ready, one of them is the control-plane, two are workers, and the control-plane has `ingress-ready=true`. The ingress-nginx controller is Running. `curl` reaches nginx. A 404 is a pass, because the app Ingress is Part 2. `argocd-server`, `argocd-repo-server`, and `argocd-application-controller` are Running. `terraform plan -destroy` lists the cluster and both Helm releases. Do not apply that destroy plan. Leave the cluster up.
+
+Helm uses the cluster's API address and certificates. kubectl uses `terraform/kubeconfig`. That file, `.terraform/`, and `*.tfstate*` stay uncommitted.

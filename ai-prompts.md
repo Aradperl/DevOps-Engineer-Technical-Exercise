@@ -23,3 +23,11 @@ Add git handling to the plan. The repo is already cloned on the desktop. Conside
 Build the README and wait for approval.
 
 Implement Part 0 as specified: README plan, `ai-prompts.md`, Python service, non-root Dockerfile, local checks. Commit the README and prompt log before the app exists. Two commits on `main`. No pull request.
+
+## Part 1
+
+Form a plan for Part 1 with the implementation and the tests that show the part is done.
+
+Add a copy-paste git command section, and an explanation of what the code change does.
+
+Implement Part 1 as specified. Terraform creates a kind cluster named `exercise` with 1 control-plane and 2 workers, installs ingress-nginx and Argo CD, and can destroy the cluster. Do not commit. The desktop runs apply and the checks.
