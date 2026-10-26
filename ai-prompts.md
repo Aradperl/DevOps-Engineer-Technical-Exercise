@@ -55,3 +55,5 @@ The first run pushed the image and then failed. `GITHUB_TOKEN` got HTTP 404 from
 The retry run went green and committed the tag. The kind nodes are arm64 and the published image was linux/amd64 plus an attestation manifest, so the new pod stayed in ImagePullBackOff. Build `linux/arm64` with provenance and sbom turned off. The old pods keep serving because `maxUnavailable` is 0.
 
 The arm64 tag rolled out. Both pods are Ready on that image and the page still shows the old message. Change `MESSAGE` to `hello from the rollout`, push, and curl `http://web.local` through the rollout. A pass is a 200 on every request.
+
+That curl loop printed `000fail`. macOS treats `.local` as a network name, so curl never reached the ingress. The rollout had already finished. Run the loop with `--resolve web.local:80:127.0.0.1` and change `MESSAGE` to `hello during the rollout` while it is printing `200`.
