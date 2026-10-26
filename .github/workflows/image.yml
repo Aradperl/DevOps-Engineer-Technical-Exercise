@@ -38,17 +38,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh api --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            /user/packages/container/devops-engineer-technical-exercise \
-            -f visibility=public; then
-            echo "Package is public."
-          else
-            echo "GITHUB_TOKEN could not change the package visibility."
-            echo "Set it to public, then re-run this job:"
-            echo "https://github.com/users/Aradperl/packages/container/devops-engineer-technical-exercise/settings"
-            exit 1
-          fi
+          # /user/packages is for a personal token. The Actions token is not a
+          # user, so that path returned 404 on the first run. This is the
+          # package that belongs to the Aradperl account.
+          pkg="/users/Aradperl/packages/container/devops-engineer-technical-exercise"
+          for attempt in 1 2 3 4 5 6; do
+            visibility=$(gh api "$pkg" --jq .visibility 2>/dev/null || true)
+            if [ "$visibility" = "public" ]; then
+              echo "Package is public."
+              exit 0
+            fi
+            gh api --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              "$pkg" \
+              -f visibility=public || true
+            echo "Attempt ${attempt}: package is not public yet."
+            sleep 5
+          done
+          echo "Set the package to public, then re-run this job:"
+          echo "https://github.com/users/Aradperl/packages/container/devops-engineer-technical-exercise/settings"
+          exit 1
 
       - name: Write the image tag into the Deployment
         run: |

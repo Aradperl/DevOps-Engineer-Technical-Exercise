@@ -144,7 +144,7 @@ curl -fsS http://web.local/
 
 A pass is Application `web` Synced and Healthy, two Running pods, and `curl` printing the HTML page. Open `http://web.local` in a browser too. A refresh can show either pod name. Leave the cluster up.
 
-Part 3 is written and has not run yet. `.github/workflows/image.yml` runs on every push to `main` unless the pusher is `github-actions[bot]`. It builds this repo's Dockerfile, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag into `deploy/web/deployment.yaml` with `imagePullPolicy: IfNotPresent`. The workflow does not run kubectl. Argo CD syncs the bot commit from `main`.
+Part 3 ran once. The image push for `67951334b064838fe39961bcc6eb10474ca37c67` succeeded, then the job failed while making the package public, so the Deployment tag was not committed. The app is still `web:local`. `.github/workflows/image.yml` runs on every push to `main` unless the pusher is `github-actions[bot]`. It builds this repo's Dockerfile, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag into `deploy/web/deployment.yaml` with `imagePullPolicy: IfNotPresent`. The workflow does not run kubectl. Argo CD syncs the bot commit from `main`.
 
 The kind nodes pull the image themselves, so the GHCR package has to be public. The repo's Actions token was read-only, which would block that tag commit. It is now allowed to write.
 

@@ -49,3 +49,5 @@ Record the Part 2 browser check in the README. The candidate commits and pushes 
 The Part 2 README commit is pushed. Implement Part 3.
 
 A workflow on push to `main` builds the image, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full-sha>`, and commits that tag into `deploy/web/deployment.yaml`. Skip pushes from `github-actions[bot]`. Do not run kubectl. The package has to be public so the kind nodes can pull it. Leave the message change and the curl loop for the push after this workflow is on `main`. Update the README and this file in the same change. The candidate commits and pushes.
+
+The first run pushed the image and then failed. `GITHUB_TOKEN` got HTTP 404 from `/user/packages`, so the tag was not committed. Call `/users/Aradperl/packages/container/devops-engineer-technical-exercise` instead, and retry until the package record exists.
