@@ -72,6 +72,21 @@ If time runs short, drop in this order: bonus, the live curl loop, the CI tag wr
 
 ## Status
 
-Part 0 is in progress. This README and `ai-prompts.md` are the first commit. The service and the image follow.
+Part 0, checked from the agent session on 26 Oct 2026:
 
-Nothing has been deployed. The cluster is not up.
+- `GET /` returns HTML with the message, version `0.1.0`, and hostname `local-check`.
+- `GET /healthz` returns 200 and `ok`.
+- Any other path returns 404.
+
+Docker is not installed in that session, so the image is not built there yet. On the desktop, where Docker is installed, run:
+
+```bash
+docker build -t web:local .
+docker run --rm -d --name web-part0 -p 8080:8080 web:local
+curl -fsS http://127.0.0.1:8080/
+curl -fsS -D- http://127.0.0.1:8080/healthz
+docker exec web-part0 id
+docker rm -f web-part0
+```
+
+`id` should show uid 65532. Nothing has been deployed. The cluster is not up.
