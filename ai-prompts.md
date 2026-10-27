@@ -51,7 +51,3 @@ I want an HPA for `web`, minimum 2 and maximum 5, synced by the existing Applica
 In the README, write what would change on EKS. Do not build an EKS cluster.
 
 The push was rejected because Actions had committed an image tag. Rebase my commit onto that tag and push. Do not force-push.
-
-## This write-up
-
-Read the README and `ai-prompts.md`. Rewrite the README as a report for the reviewer: what is finished, what is missing, one decision and why, and one place the AI was wrong and how I noticed. Rewrite the prompt log so it shows how I planned, what I checked myself, and where I sent a failure back. Keep both files accurate to the repo.
