@@ -1,71 +1,57 @@
 # AI prompts
 
-Prompts that produced the changes in this repo, kept with the commits they belong to.
+I used Cursor to plan, draft, and debug. I read the diff before each commit, committed on `main` myself, and ran the checks on this machine. The prompts below are the instructions I gave, cut down to the ask. When a check failed, I pasted the result and asked for the cause before accepting a change.
 
-## Plan and this README
+## Plan
 
-Read the candidate instructions PDF and write a 90-minute plan the candidate can execute. Do not implement yet.
+Read the candidate instructions. Do not write code yet. Propose a tool choice and the order of work for a local cluster, Python, and this existing public repository. Stay on `main`. No pull request. Wait for me to approve the plan.
 
-Answers that locked the plan:
+## Part 0
 
-1. The candidate and the agents work together to implement the solution.
-2. GitHub is already logged in.
-3. The cluster is local.
-4. Python.
-5. Docker is downloaded; check whether the other tools are installed.
-6. Use the existing repository.
-7. The repository is public.
+Draft the plan into the README and list the prompts in `ai-prompts.md`. Stop there so I can read it.
 
-Form a plan for Part 0. The repo exists and the tools are installed.
-
-Add git handling to the plan. The repo is already cloned on the desktop. Consider whether a new branch is needed.
-
-Build the README and wait for approval.
-
-Implement Part 0 as specified: README plan, `ai-prompts.md`, Python service, non-root Dockerfile, local checks. Commit the README and prompt log before the app exists. Two commits on `main`. No pull request.
+The plan is fine. Add `app/server.py` and a non-root Dockerfile. Python standard library only. `GET /` is HTML with the message, version, and hostname. `GET /healthz` returns 200. The process listens on 8080 as uid 65532. Explain each file in a few sentences. I will build `web:local` and curl it myself.
 
 ## Part 1
 
-Form a plan for Part 1 with the implementation and the tests that show the part is done.
+Plan the Terraform only. I want a kind cluster named `exercise`, 1 control-plane and 2 workers, ingress-nginx, and Argo CD, and `terraform destroy` must remove them. Tell me how I will know the apply worked. Do not apply it.
 
-Add a copy-paste git command section, and an explanation of what the code change does.
+`brew install terraform` failed. Homebrew says there is no formula by that name. Tell me the current way to install Terraform, then the commands to run from `terraform/`. I will apply and run the node checks.
 
-Implement Part 1 as specified. Terraform creates a kind cluster named `exercise` with 1 control-plane and 2 workers, installs ingress-nginx and Argo CD, and can destroy the cluster. Do not commit. The desktop runs apply and the checks.
-
-`brew install terraform` fails because Homebrew core no longer has that formula. Install Terraform from the HashiCorp tap, plus kind and Helm. Run init, validate, and apply from `terraform/`.
-
-Commit only the two `h1` lines `terraform init` added to `terraform/.terraform.lock.hcl`. The candidate commits and pushes that by hand.
+`terraform init` changed `terraform/.terraform.lock.hcl` by two `h1` lines. Explain that diff. I will commit only that file.
 
 ## Part 2
 
-Plan Part 2, then implement it after the lockfile commit is on `main`.
+The cluster is up. Plan the GitOps manifests before writing them. I want 2 replicas, probes on `/healthz`, requests and limits, `maxUnavailable: 0`, `maxSurge: 1`, and an Ingress for `web.local`. The first image can be `web:local` loaded into kind. Explain where the Argo CD Application should live so it is not synced into the wrong namespace.
 
-Manifests for the app live in `deploy/web`. The Argo CD Application lives in `deploy/application.yaml` and is applied once into the `argocd` namespace. It syncs `deploy/web` from `main`. The first image is `web:local`, loaded into kind. The Ingress host is `web.local`. Update the README status and this file in the same change. The candidate commits and pushes before Argo CD is asked to sync.
+Write those files. I will read them, commit, push, load the image, and apply the Application. Give me the checks, including the browser.
 
-Record the Part 2 browser check in the README. The candidate commits and pushes that.
+The page is open at `http://web.local`. Record that in the README. I will commit it.
 
 ## Part 3
 
-The Part 2 README commit is pushed. Implement Part 3.
+Part 2 is on `main`. Draft a GitHub Actions workflow. On push to `main`, build the image, push `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commit that tag into `deploy/web/deployment.yaml`. Skip pushes from `github-actions[bot]`. Do not run kubectl. The package has to be public. Do not change the message in this commit. I will push and watch Actions.
 
-A workflow on push to `main` builds the image, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full-sha>`, and commits that tag into `deploy/web/deployment.yaml`. Skip pushes from `github-actions[bot]`. Do not run kubectl. The package has to be public so the kind nodes can pull it. Leave the message change and the curl loop for the push after this workflow is on `main`. Update the README and this file in the same change. The candidate commits and pushes.
+The first run is red. The build log shows the image digest, then the public-package step returns HTTP 404. Explain that failure. Do not replace the workflow until I agree with the cause.
 
-The first run pushed the image and then failed. `GITHUB_TOKEN` got HTTP 404 from `/user/packages`, so the tag was not committed. Call `/users/Aradperl/packages/container/devops-engineer-technical-exercise` instead, and retry until the package record exists.
+The retry is green and the tag is committed, but the new pod is `ImagePullBackOff`. The old pods are still Ready. Read the pod event and the image manifest, and tell me the platform mismatch. I will decide the fix.
 
-The retry run went green and committed the tag. The kind nodes are arm64 and the published image was linux/amd64 plus an attestation manifest, so the new pod stayed in ImagePullBackOff. Build `linux/arm64` with provenance and sbom turned off. The old pods keep serving because `maxUnavailable` is 0.
+Build `linux/arm64` and turn provenance off. I checked: the nodes are arm64 and the published manifest was amd64 plus an attestation.
 
-The arm64 tag rolled out. Both pods are Ready on that image and the page still shows the old message. Change `MESSAGE` to `hello from the rollout`, push, and curl `http://web.local` through the rollout. A pass is a 200 on every request.
+The corrected image is running. I will change `MESSAGE` and run a curl loop during the rollout. Give me the loop. I will push and watch it.
 
-That curl loop printed `000fail`. macOS treats `.local` as a network name, so curl never reached the ingress. The rollout had already finished. Run the loop with `--resolve web.local:80:127.0.0.1` and change `MESSAGE` to `hello during the rollout` while it is printing `200`.
-
-The browser showed that message on pod `web-57bcf54d88-s9w72`. Record the finished parts, the missing bonus, the arm64 image decision, and the `.local` curl failure in the README.
+The loop printed `000fail` on every line. The browser still shows the page. `/etc/hosts` has `web.local`, and curl to `127.0.0.1` with `Host: web.local` returns 200. Explain the failure. Do not call it an app error.
 
 ## Bonus
 
-Part 3 is done. Add the bonus.
+Parts 0 to 3 are done and the cluster is up. Add the bonus, and tell me what I still have to apply or click.
 
-An HorizontalPodAutoscaler for `web`, minimum 2 replicas and maximum 5, in `deploy/web` so the existing Argo CD Application syncs it. The cluster has no metrics API, so install metrics-server through Argo CD. Kind's kubelet certificate is not trusted by metrics-server, so pass `--kubelet-insecure-tls`.
+I want an HPA for `web`, minimum 2 and maximum 5, synced by the existing Application. metrics-server has to come from Argo CD, because `kubectl top` says the metrics API is missing. Prometheus and Grafana also come from Argo CD. Pin the chart versions. Leave Alertmanager out. Grafana should use the ingress we already have.
 
-Install Prometheus and Grafana through Argo CD with the `kube-prometheus-stack` chart. Leave Alertmanager out. Grafana is reachable at `grafana.local` through the ingress that is already installed. Pin the chart versions.
+In the README, write what would change on EKS. Do not build an EKS cluster.
 
-In the README, write what would change to run this on EKS. The candidate commits and pushes. Apply the two new Applications once; they are Helm releases, so they stay outside `deploy/web`.
+The push was rejected because Actions had committed an image tag. Rebase my commit onto that tag and push. Do not force-push.
+
+## This write-up
+
+Read the README and `ai-prompts.md`. Rewrite the README as a report for the reviewer: what is finished, what is missing, one decision and why, and one place the AI was wrong and how I noticed. Rewrite the prompt log so it shows how I planned, what I checked myself, and where I sent a failure back. Keep both files accurate to the repo.

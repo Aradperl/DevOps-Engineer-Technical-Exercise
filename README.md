@@ -1,192 +1,101 @@
 # DevOps technical exercise
 
-Small Python web service, deployed to a local Kubernetes cluster the GitOps way.
+A small Python web service, built into a container and deployed to a local Kubernetes cluster with Terraform and Argo CD. The repository is [Aradperl/DevOps-Engineer-Technical-Exercise](https://github.com/Aradperl/DevOps-Engineer-Technical-Exercise). Work stayed on `main`. There is no feature branch and no pull request.
 
-Build window: Monday 26 Oct 2026, finish the build around 16:45 Asia/Jerusalem. A review follows. Finishing every part is not the goal. The history and being able to explain each file are.
+The cluster is still running on this machine. `terraform/kubeconfig` is the kubeconfig. That file, `terraform/.terraform/`, and `*.tfstate*` are not in git.
 
-## Tools
-
-Already installed on the build machine. Versions were checked there; this file names the tools and their roles. The repo is [Aradperl/DevOps-Engineer-Technical-Exercise](https://github.com/Aradperl/DevOps-Engineer-Technical-Exercise), public, cloned locally.
-
-| Tool | Role |
-| --- | --- |
-| Python 3 standard library | The web process. No framework and no pip dependencies. |
-| Docker | Build and run the image locally. |
-| kind | Local cluster: 1 control-plane and 2 workers. |
-| Terraform (`tehcyx/kind`, Helm, Kubernetes providers) | Create the cluster, ingress-nginx, and Argo CD. `terraform destroy` removes them. |
-| kubectl | Inspect the cluster. Not used from CI. |
-| Helm | Install ingress-nginx and Argo CD from Terraform. |
-| ingress-nginx | Ingress controller. Host port 80 on the control-plane. |
-| Argo CD | Syncs manifests from this repo. |
-| GitHub Actions and GHCR | Part 3. Build on push to `main`, push the image tagged with the commit SHA, update that tag in git. The GHCR package is public. |
-
-Git stays on `main`. Commit and push as each slice lands. No feature branch and no pull request.
-
-## What the app does
-
-`GET /` returns an HTML page, not JSON. The page shows a message, the app version, and the pod name.
-
-- `MESSAGE` and `APP_VERSION` come from environment variables.
-- The pod name is `HOSTNAME`, which Kubernetes sets to the pod name.
-- `GET /healthz` returns 200.
-- The process listens on port 8080 and runs as uid 65532.
-
-Local image tag: `web:local`.
-
-## Steps
+## What I finished
 
 ### Part 0 — service and image
 
-1. This README, with the plan and the tools above.
-2. `ai-prompts.md` for the prompts used to produce each change.
-3. `app/server.py` on port 8080.
-4. A Dockerfile that runs as non-root. Build it and run it locally. Check `/` and `/healthz`.
+`app/server.py` uses only the Python standard library. `GET /` returns HTML with the message, the app version, and the pod name. `GET /healthz` returns `200` and `ok`. Any other path returns `404`. The process listens on port 8080.
+
+`MESSAGE` and `APP_VERSION` come from the environment. The pod name is `HOSTNAME`, which Kubernetes sets to the pod name.
+
+The Dockerfile uses `python:3.12-slim` and runs as uid `65532`. I built `web:local` and checked it on this machine: `/` returned the HTML page, `/healthz` returned `200`, and `id` inside the container showed uid `65532`.
 
 ### Part 1 — cluster as code
 
-Terraform creates the kind cluster (1 control-plane, 2 workers) and installs ingress-nginx and Argo CD. `terraform apply` brings it up. `terraform destroy` tears it down.
+`terraform/` creates a kind cluster named `exercise` with 1 control-plane and 2 workers, then installs ingress-nginx `4.15.1` and Argo CD `10.11.6`. Host port 80 is mapped to the control-plane, which is labeled `ingress-ready=true`. `terraform apply` created all three. `terraform destroy` would remove them. I did not destroy the cluster.
+
+Checked after apply: three nodes Ready, one control-plane and two workers, ingress-nginx Running, and `curl http://127.0.0.1/` answered by nginx. A 404 there was expected before the app Ingress existed. `argocd-server`, `argocd-repo-server`, and `argocd-application-controller` were Running.
+
+Terraform on this Mac is `brew install hashicorp/tap/terraform`. `brew install terraform` no longer exists in Homebrew core. Providers are pinned in `terraform/versions.tf`: `tehcyx/kind` `0.13.0` and `hashicorp/helm` `2.17.0`.
 
 ### Part 2 — GitOps
 
-Manifests live in `deploy/`. Argo CD syncs them from `main`.
+Argo CD Application `web` syncs `deploy/web` from `main` into the `default` namespace. The Application manifest is `deploy/application.yaml`. It is applied once into the `argocd` namespace and is not inside `deploy/web`, so Argo CD does not copy that Application into `default`.
 
-- Deployment: 2 replicas, readiness and liveness probes on `/healthz`, resource requests and limits, rolling update `maxUnavailable: 0` and `maxSurge: 1`.
-- Service and an Ingress for `web.local`.
-- The page opens in a browser on this machine.
+`deploy/web/deployment.yaml` has 2 replicas, readiness and liveness probes on `/healthz`, CPU and memory requests and limits, and a rolling update of `maxUnavailable: 0` and `maxSurge: 1`. The container runs as uid `65532`. `deploy/web/service.yaml` is a ClusterIP Service on port 80, targeting container port 8080. `deploy/web/ingress.yaml` uses class `nginx` and host `web.local`. `/etc/hosts` has `127.0.0.1 web.local`.
 
-The first sync can use the local image loaded into kind. The registry tag comes in Part 3.
+The first sync used the local image loaded into kind. The page opened in the browser at `http://web.local`.
 
-### Part 3 — CI, if time remains
+### Part 3 — CI
 
-A workflow on push to `main` builds the image, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full-sha>`, and commits the new tag back to `deploy/`. The workflow skips pushes from `github-actions[bot]` so that commit does not loop. CI does not run `kubectl apply`.
+`.github/workflows/image.yml` runs on every push to `main`, except when the pusher is `github-actions[bot]`. It builds the image, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag back into `deploy/web/deployment.yaml`. CI does not run kubectl. Argo CD rolls out the bot commit.
 
-Then change the message, push, and run a curl loop during the rollout. The loop should show no failed responses.
+The GHCR package is public, so the kind nodes can pull it. The repository's Actions token was read-only at first, which would have blocked that commit. It is allowed to write now.
 
-### Bonus — only after Part 3
+The image is built for `linux/arm64`, with provenance and sbom turned off. The first published tag was `linux/amd64` plus an attestation manifest. The nodes rejected it. See the decision below.
 
-- HorizontalPodAutoscaler, min 2, max 5.
-- Prometheus and Grafana, installed through Argo CD.
-- A short note here on what would change to run this on EKS.
+I changed `MESSAGE` to `hello during the rollout` and pushed. The browser at `http://web.local` showed that message, version `0.1.0`, and a new pod name. The Deployment image is the tag in `deploy/web/deployment.yaml`. A later push to `main` builds a new tag and Argo CD follows it.
 
-If time runs short, drop in this order: bonus, the live curl loop, the CI tag write-back, the workflow itself, and Terraform only if apply is still failing. Keep the image, the service, the Deployment shape, this README, and `ai-prompts.md`.
+### Bonus
 
-## Status
+`deploy/web/hpa.yaml` scales `web` from 2 to 5 replicas at 70% CPU. The web Application syncs it with the rest of `deploy/web`.
 
-Part 0, checked from the agent session on 26 Oct 2026:
+metrics-server and kube-prometheus-stack are separate Argo CD Applications, `deploy/metrics-server.yaml` and `deploy/monitoring.yaml`, because they are Helm charts. metrics-server chart `3.14.0` is started with `--kubelet-insecure-tls`, which kind needs. kube-prometheus-stack chart `92.14.0` installs Prometheus and Grafana. Alertmanager is off. Grafana is at `http://grafana.local` through the existing ingress. `/etc/hosts` has `127.0.0.1 grafana.local`. The login user is `admin`. The password is the `admin-password` key in the Secret `monitoring-grafana` in the `monitoring` namespace.
 
-- `GET /` returns HTML with the message, version `0.1.0`, and hostname `local-check`.
-- `GET /healthz` returns 200 and `ok`.
-- Any other path returns 404.
+I opened Grafana in the browser. Applications `web`, `metrics-server`, and `monitoring` were Synced and Healthy, and the HPA was reporting CPU against the 70% target with 2 replicas.
 
-The image build runs on the desktop, where Docker is installed:
+## What is missing
 
-```bash
-docker build -t web:local .
-docker run --rm -d --name web-part0 -p 8080:8080 web:local
-curl -fsS http://127.0.0.1:8080/
-curl -fsS -D- http://127.0.0.1:8080/healthz
-docker exec web-part0 id
-docker rm -f web-part0
-```
+The required parts and the bonus are done. I did not build an EKS cluster. The EKS section below is the note the exercise asked for, not a second environment.
 
-`id` should show uid 65532.
+Alertmanager is disabled. Prometheus on this laptop does not use a persistent volume. Both were left out so the local cluster stayed small enough to run beside the app.
 
-Part 1 was applied on 26 Oct 2026 from `terraform/`. `terraform apply` added the kind cluster, ingress-nginx, and Argo CD. The checks below passed: three Ready nodes (1 control-plane, 2 workers), the control-plane labeled `ingress-ready=true`, the ingress-nginx controller Running, `curl http://127.0.0.1/` returning nginx's 404, and `argocd-server`, `argocd-repo-server`, and `argocd-application-controller` Running. The cluster is still up. Terraform on this Mac is `brew install hashicorp/tap/terraform`, because `brew install terraform` no longer exists. Chart versions pinned in Terraform:
+## One decision and why
 
-- ingress-nginx `4.15.1`
-- argo-cd `10.11.6`
-- provider `tehcyx/kind` `0.13.0`
-- provider `hashicorp/helm` `2.17.0`
+The workflow builds `linux/arm64` and turns provenance off.
 
-From `terraform/`:
+GitHub-hosted runners are amd64. The kind nodes on this Mac are arm64. The first green workflow published an amd64 image wrapped in a manifest list that also contained an attestation. The new pod stayed in `ImagePullBackOff` with `no match for platform in manifest`. The two old pods kept serving because `maxUnavailable` is 0, so the page stayed up while I read the pod event and compared it with `docker buildx imagetools inspect`.
+
+An arm64 image without the attestation manifest is one image the nodes can run. A multi-arch image was unnecessary for this exercise.
+
+## One place the AI was wrong, and how I noticed
+
+The first rollout loop was `curl http://web.local/` with a 2 second limit. Every line was `000fail`.
+
+I noticed because the browser still showed the page, and `/etc/hosts` already had `127.0.0.1 web.local`. A request to `http://127.0.0.1/` with `Host: web.local` returned `200` and the HTML. Curl was spending the whole timeout on the name. macOS treats `.local` as a network discovery name. The loop that reaches the ingress is:
 
 ```bash
-terraform init
-terraform validate
-terraform apply
+curl --resolve web.local:80:127.0.0.1 http://web.local/
 ```
 
-Then:
+That version returned `200`. The `000fail` lines were the lookup, not failed responses from the app.
 
-```bash
-kubectl --kubeconfig=kubeconfig get nodes
-kubectl --kubeconfig=kubeconfig get nodes -l node-role.kubernetes.io/control-plane --no-headers
-kubectl --kubeconfig=kubeconfig get nodes -l '!node-role.kubernetes.io/control-plane' --no-headers
-kubectl --kubeconfig=kubeconfig get nodes -l ingress-ready=true --no-headers
-kubectl --kubeconfig=kubeconfig get pods -n ingress-nginx
-curl -sI http://127.0.0.1/
-kubectl --kubeconfig=kubeconfig get pods -n argocd
-terraform plan -destroy
-```
+## What would change on EKS
 
-Pass looks like this: `terraform validate` and `terraform apply` exit 0. Three nodes are Ready, one of them is the control-plane, two are workers, and the control-plane has `ingress-ready=true`. The ingress-nginx controller is Running. `curl` reaches nginx. A 404 is a pass, because the app Ingress is Part 2. `argocd-server`, `argocd-repo-server`, and `argocd-application-controller` are Running. `terraform plan -destroy` lists the cluster and both Helm releases. Do not apply that destroy plan. Leave the cluster up.
-
-Helm uses the cluster's API address and certificates. kubectl uses `terraform/kubeconfig`. That file, `.terraform/`, and `*.tfstate*` stay uncommitted.
-
-Part 2 was synced on 26 Oct 2026. Application `web` is Synced and Healthy at `e96c2e0`. Two pods are Running. `http://web.local` shows the message, version `0.1.0`, and the pod name. `/etc/hosts` contains `127.0.0.1 web.local`. Argo CD reads GitHub, so a manifest change has to be pushed before it syncs.
-
-- `deploy/web/deployment.yaml`: 2 replicas, probes on `/healthz`, requests and limits, rolling update `maxUnavailable: 0` and `maxSurge: 1`. Image `web:local` with `imagePullPolicy: Never`. The process runs as uid 65532. `HOSTNAME` is left unset so Kubernetes sets it to the pod name.
-- `deploy/web/service.yaml`: ClusterIP, port 80 to container port 8080.
-- `deploy/web/ingress.yaml`: class `nginx`, host `web.local`.
-- `deploy/application.yaml`: applied once into the `argocd` namespace. It syncs `deploy/web` from `main`. It stays outside `deploy/web` so Argo CD does not copy that Application into `default`.
-
-After the push, from the repo root:
-
-```bash
-docker build -t web:local .
-kind load docker-image web:local --name exercise
-kubectl --kubeconfig=terraform/kubeconfig apply -f deploy/application.yaml
-kubectl --kubeconfig=terraform/kubeconfig get applications -n argocd
-kubectl --kubeconfig=terraform/kubeconfig get pods,svc,ingress
-grep -q 'web.local' /etc/hosts || echo '127.0.0.1 web.local' | sudo tee -a /etc/hosts
-curl -fsS http://web.local/
-```
-
-A pass is Application `web` Synced and Healthy, two Running pods, and `curl` printing the HTML page. Open `http://web.local` in a browser too. A refresh can show either pod name. Leave the cluster up.
-
-Part 3 is done. Application `web` is Synced and Healthy at `0d5e57c`. Both pods run `ghcr.io/aradperl/devops-engineer-technical-exercise:960cf0f79f5b7de3888524c92e267ea38722dfa8`. On 26 Oct 2026 at 19:40 the browser at `http://web.local` showed message `hello during the rollout`, version `0.1.0`, and pod `web-57bcf54d88-s9w72`. The earlier tag `8a62500` was linux/amd64, which the arm64 nodes refused. The workflow builds `linux/arm64` with provenance and sbom turned off. A curl to `http://web.local` from this Mac returns `000` because `.local` is resolved as a network name and the lookup hits the 2 second limit. The same request with `--resolve web.local:80:127.0.0.1` returns `200`. `.github/workflows/image.yml` runs on every push to `main` unless the pusher is `github-actions[bot]`. It builds this repo's Dockerfile, pushes `ghcr.io/aradperl/devops-engineer-technical-exercise:<full sha>`, and commits that tag into `deploy/web/deployment.yaml` with `imagePullPolicy: IfNotPresent`. The workflow does not run kubectl. Argo CD syncs the bot commit from `main`.
-
-The kind nodes pull the image themselves, so the GHCR package has to be public. The repo's Actions token was read-only, which would block that tag commit. It is now allowed to write.
-
-After this commit is pushed, the run to watch is the `image` workflow. A pass is a green run and a following commit, `Roll the web image to <sha>`, whose Deployment image is `ghcr.io/aradperl/devops-engineer-technical-exercise:<that sha>`. Application `web` then becomes Synced and Healthy on that commit, and `http://web.local` still returns the page.
-
-The message change comes after that. Edit `MESSAGE` in `deploy/web/deployment.yaml`, push, and while Argo CD rolls it out:
-
-```bash
-while true; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 --resolve web.local:80:127.0.0.1 http://web.local/ || echo fail)
-  printf '%s %s\n' "$(date +%T)" "$code"
-  sleep 0.2
-done
-```
-
-A pass is a `200` on every line. Old pods keep serving during the rollout because `maxUnavailable` is 0. Argo CD polls GitHub about every 3 minutes. To ask it to read `main` now:
-
-```bash
-kubectl --kubeconfig=terraform/kubeconfig annotate application web -n argocd argocd.argoproj.io/refresh=hard --overwrite
-```
-
-## Where this stands
-
-Finished:
-
-- Part 0. Python service, non-root image, checked locally.
-- Part 1. Kind cluster `exercise` is up: 1 control-plane, 2 workers, ingress-nginx, Argo CD. Leave it up.
-- Part 2. Argo CD syncs `deploy/web` from `main`. The page opens at `http://web.local`.
-- Part 3. GitHub Actions builds an arm64 image, pushes it to public GHCR tagged with the full commit SHA, and commits that tag back to `deploy/web/deployment.yaml`. CI does not run kubectl. The browser shows `hello during the rollout`.
-
-Bonus manifests are in this commit. `deploy/web/hpa.yaml` scales `web` from 2 to 5 replicas at 70% CPU. `deploy/metrics-server.yaml` and `deploy/monitoring.yaml` are Argo CD Applications for Helm charts, applied once, the same way as `deploy/application.yaml`. They stay outside `deploy/web` so the web Application does not copy them into `default`.
-
-## EKS
-
-The local cluster is kind. On EKS the application manifests and the GitHub workflow stay. These pieces change:
+The application manifests and the GitHub workflow stay. These pieces change:
 
 - Terraform creates an EKS cluster and a managed node group instead of a kind cluster. `terraform destroy` still removes them. kubectl uses the AWS kubeconfig, not `terraform/kubeconfig`.
 - ingress-nginx is a LoadBalancer, or the AWS Load Balancer Controller replaces it. The control-plane host port 80 and the `ingress-ready` label go away.
-- The image is the same public GHCR tag, or a copy in ECR. There is no `kind load`, and `imagePullPolicy: Never` is not used.
-- Prometheus keeps its data on a persistent volume such as gp3. This laptop uses the chart's empty disk because the data only has to last for the exercise.
+- The image stays the public GHCR tag, or moves to ECR. There is no `kind load`, and `imagePullPolicy: Never` is not used.
+- Prometheus keeps its data on a persistent volume such as gp3.
 - metrics-server does not get `--kubelet-insecure-tls`. EKS kubelet certificates are ones the API server trusts.
 
-One decision: the workflow builds `linux/arm64` and turns provenance off. GitHub's runner is amd64. The kind nodes on this Mac are arm64. The first published tag was an amd64 image plus an attestation manifest, and the node reported no matching platform. `maxUnavailable: 0` kept the old pods serving until an image the nodes could run existed.
+## Where to look
 
-One place the AI was wrong: the curl loop was first given as `curl http://web.local/`. Every line was `000fail`. `/etc/hosts` already contained `127.0.0.1 web.local`, and `curl -H 'Host: web.local' http://127.0.0.1/` returned `200`. macOS was spending the timeout on the `.local` lookup. The loop that reaches the ingress is `curl --resolve web.local:80:127.0.0.1 http://web.local/`.
+| Path | What it is |
+| --- | --- |
+| `app/server.py` | The web process |
+| `Dockerfile` | Non-root image, uid 65532 |
+| `terraform/` | kind cluster, ingress-nginx, Argo CD |
+| `deploy/web/` | Deployment, Service, Ingress, HPA |
+| `deploy/application.yaml` | Argo CD app for `deploy/web` |
+| `deploy/metrics-server.yaml` | Argo CD app for metrics-server |
+| `deploy/monitoring.yaml` | Argo CD app for Prometheus and Grafana |
+| `.github/workflows/image.yml` | Build, push, and write the image tag back |
+| `ai-prompts.md` | Prompts used for each part |
+
+Pages on this machine: `http://web.local` and `http://grafana.local`. Inspect the cluster with `kubectl --kubeconfig=terraform/kubeconfig`. Leave the cluster up.
